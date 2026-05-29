@@ -2,19 +2,15 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import Database from 'better-sqlite3';
-import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import cron from 'node-cron';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   // Initialize Database
-  const db = new Database('pill_counter.db');
+  const db = new Database(path.join(process.cwd(), 'pill_counter.db'));
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 

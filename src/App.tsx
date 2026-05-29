@@ -30,6 +30,7 @@ import {
   Signal,
   Pencil,
   UserPlus,
+  Minus,
   Cpu,
   Lock,
   Search,
