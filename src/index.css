@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #00BCD4;
+  --color-surface: var(--surface-color);
+  --color-bg: var(--bg-color);
+  --color-border-themed: var(--border-color);
+  --color-text-themed: var(--text-color);
+  --color-muted-bg: var(--muted-bg);
+  --color-success: #4CAF50;
+  --color-warning: #FFC107;
+  
+  --font-sans: 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+:root {
+  --bg-color: #121212;
+  --surface-color: #1E1E1E;
+  --text-color: #ffffff;
+  --border-color: #333333;
+  --muted-bg: rgba(0,0,0,0.2);
+}
+
+body.light {
+  --bg-color: #f5f5f5;
+  --surface-color: #ffffff;
+  --text-color: #1e293b;
+  --border-color: #e2e8f0;
+  --muted-bg: rgba(0,0,0,0.05);
+}
+
+@layer base {
+  * {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  *::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+}
+
+.custom-scrollbar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  display: none !important;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-sans);
+  transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+/* Ensure no bounce on touch */
+html, body {
+  overscroll-behavior: none;
+}
+
