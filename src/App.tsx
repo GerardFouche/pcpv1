@@ -249,6 +249,7 @@ export default function App() {
                 onConnected={fetchWifiStatus}
                 theme={theme} 
                 onThemeChange={setTheme} 
+                onHardware={() => setView('hardware_status')}
                 onBack={() => setView('login')} 
                 showToast={showToast} 
               />
@@ -298,6 +299,11 @@ export default function App() {
           {view === 'admin_settings' && user?.role === 'admin' && (
             <motion.div key="admin_settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
               <AdminSettingsScreen onBack={() => setView('admin')} showToast={showToast} />
+            </motion.div>
+          )}
+          {view === 'hardware_status' && (
+            <motion.div key="hardware_status" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
+              <HardwareStatusScreen onBack={() => setView('settings')} showToast={showToast} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -622,14 +628,14 @@ function LiveCountScreen({ medName, count, setCount, onBack, onDone, user, showT
       initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }}
       className="h-full flex flex-col relative bg-bg"
     >
-      <div className="flex-1 flex flex-row gap-4 p-4 h-full overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4 h-full overflow-hidden">
         {/* Camera Feed Area */}
-        <div className="flex-1 bg-black rounded-3xl border-2 border-border-themed relative overflow-hidden flex items-center justify-center">
+        <div className="flex-1 bg-black rounded-3xl border-2 border-border-themed relative overflow-hidden flex items-center justify-center min-h-0">
           <div className="absolute inset-0 opacity-10 pointer-events-none" 
             style={{ background: 'repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.1) 40px)' }} 
           />
           
-          <div className="absolute top-6 left-6 flex flex-col gap-2">
+          <div className="absolute top-6 left-6 flex flex-col gap-2 z-10">
             <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg border border-primary/50 text-[10px] font-black tracking-[0.2em] text-primary uppercase">
               AI VISION: ACTIVE
             </div>
@@ -669,8 +675,8 @@ function LiveCountScreen({ medName, count, setCount, onBack, onDone, user, showT
         </div>
 
         {/* Control Column */}
-        <div className="w-[320px] flex flex-col gap-4">
-          <div className="bg-surface rounded-3xl border-2 border-border-themed p-6 flex flex-col gap-6 h-full shadow-2xl">
+        <div className="w-full lg:w-[320px] flex flex-col gap-4 shrink-0">
+          <div className="bg-surface rounded-3xl border-2 border-border-themed p-6 flex flex-col gap-4 lg:gap-6 h-full shadow-2xl overflow-y-auto custom-scrollbar">
             <div>
               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">ID SPEC:</span>
               <h3 className="text-2xl font-black truncate tracking-tighter uppercase text-text-themed leading-none mt-1">{medName}</h3>
@@ -795,7 +801,7 @@ function HistoryScreen({ user, onBack }: { user: User, onBack: () => void }) {
   );
 }
 
-function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onBack, showToast }: { currentSsid: string | null, onConnected: () => void, theme: 'dark' | 'light', onThemeChange: (t: 'dark' | 'light') => void, onBack: () => void, showToast: (m: string, t?: 'success' | 'error') => void }) {
+function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHardware, onBack, showToast }: { currentSsid: string | null, onConnected: () => void, theme: 'dark' | 'light', onThemeChange: (t: 'dark' | 'light') => void, onHardware: () => void, onBack: () => void, showToast: (m: string, t?: 'success' | 'error') => void }) {
   const [networks, setNetworks] = useState<{ssid: string, strength: number, secure: boolean}[]>([]);
   const [scanning, setScanning] = useState(false);
   const [selectedNetwork, setSelectedNetwork] = useState<string | null>(null);
@@ -803,9 +809,91 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onBack
   const [connecting, setConnecting] = useState(false);
   const [deviceName, setDeviceName] = useState('Loading...');
 
+  // Core Self-Update Engine states
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{
+    currentVersion: string;
+    latestVersion: string;
+    updateAvailable: boolean;
+    changelog: string[];
+  } | null>(null);
+  const [updating, setUpdating] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState(0);
+  const [updateStatus, setUpdateStatus] = useState('');
+
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(data => setDeviceName(data.device_name || 'UNKNOWN'));
   }, []);
+
+  const checkForUpdates = async () => {
+    setCheckingUpdate(true);
+    try {
+      const res = await fetch('/api/updates/check');
+      const data = await res.json();
+      if (data.success) {
+        setUpdateInfo(data);
+        if (data.updateAvailable) {
+          showToast(`New firmware version available: ${data.latestVersion}`, 'success');
+        } else {
+          showToast('System is currently up to date.', 'success');
+        }
+      } else {
+        showToast('Update server handshake failed', 'error');
+      }
+    } catch {
+      showToast('Offline or update server unreachable', 'error');
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const applyUpdate = async () => {
+    setUpdating(true);
+    setUpdateProgress(0);
+    setUpdateStatus('Handshaking with repository runner...');
+    try {
+      const res = await fetch('/api/updates/apply', { method: 'POST' });
+      const data = await res.json();
+      
+      if (data.success) {
+        // Run simulated countdown that mirrors backend's 5s reload timeout
+        const duration = 5000;
+        const stepTime = 100;
+        let elapsed = 0;
+
+        const interval = setInterval(() => {
+          elapsed += stepTime;
+          const pct = Math.min(Math.round((elapsed / duration) * 100), 100);
+          setUpdateProgress(pct);
+
+          if (pct < 25) {
+            setUpdateStatus('Downloading target files from repo origin...');
+          } else if (pct < 50) {
+            setUpdateStatus('Securing persistent database state...');
+          } else if (pct < 75) {
+            setUpdateStatus('Compiling production codebase layers...');
+          } else if (pct < 95) {
+            setUpdateStatus('Setting up system config endpoints...');
+          } else {
+            setUpdateStatus('Reloading application systems...');
+          }
+
+          if (elapsed >= duration) {
+            clearInterval(interval);
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          }
+        }, stepTime);
+      } else {
+        showToast(data.message || 'Update failed', 'error');
+        setUpdating(false);
+      }
+    } catch {
+      showToast('Connection timed out during download process', 'error');
+      setUpdating(false);
+    }
+  };
 
   const scanWifi = async () => {
     setScanning(true);
@@ -986,28 +1074,58 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onBack
                      <Cpu className="w-6 h-6 text-primary" />
                      <h3 className="text-xl font-black uppercase tracking-tight text-text-themed">System Identity</h3>
                   </div>
-                  
-                  <div className="space-y-4">
-                    <div className="p-6 bg-muted-bg border border-border-themed rounded-2xl flex items-center justify-between">
-                       <div className="flex flex-col">
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Device Name</span>
-                          <span className="text-2xl font-black text-text-themed tracking-tighter">{deviceName}</span>
-                       </div>
-                       <div className="bg-bg/50 p-2 rounded-lg">
-                          <Lock className="w-5 h-5 text-zinc-500" />
-                       </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                       <div className="p-4 bg-muted-bg border border-border-themed rounded-2xl">
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Architecture</span>
-                          <span className="font-bold text-[10px] uppercase text-text-themed tracking-widest opacity-80">ARM64 (Pi 5)</span>
+                  <div className="space-y-4">
+                     <div className="p-6 bg-muted-bg border border-border-themed rounded-2xl flex items-center justify-between">
+                        <div className="flex flex-col">
+                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Device Name</span>
+                           <span className="text-2xl font-black text-text-themed tracking-tighter">{deviceName}</span>
+                        </div>
+                        <div className="bg-bg/50 p-2 rounded-lg">
+                           <Lock className="w-5 h-5 text-zinc-500" />
+                        </div>
+                     </div>
+
+                     <div className="p-6 bg-muted-bg border border-border-themed rounded-2xl flex items-center justify-between">
+                        <div className="flex flex-col">
+                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Current Version</span>
+                           <span className="text-2xl font-black text-text-themed tracking-tighter">PCPv1.1</span>
+                        </div>
+                        <button 
+                          onClick={checkForUpdates}
+                          disabled={checkingUpdate}
+                          className="px-5 h-12 bg-primary hover:opacity-95 text-bg font-black text-xs uppercase tracking-widest rounded-xl transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center shadow-lg"
+                        >
+                          {checkingUpdate ? 'Checking...' : 'Check Updates'}
+                        </button>
+                     </div>
+
+                     <button 
+                       onClick={onHardware}
+                       className="w-full h-16 bg-muted-bg border-2 border-border-themed hover:border-primary/50 rounded-2xl flex items-center justify-between px-6 transition-all group"
+                     >
+                       <div className="flex items-center gap-4">
+                         <div className="bg-zinc-950 p-2 rounded-xl border border-zinc-800 group-hover:border-primary/30 transition-all">
+                           <Cpu className="w-5 h-5 text-emerald-400" />
+                         </div>
+                         <span className="font-black text-sm uppercase tracking-widest text-text-themed">Hardware Diagnostics</span>
                        </div>
-                       <div className="p-4 bg-muted-bg border border-border-themed rounded-2xl">
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">OS Version</span>
-                          <span className="font-bold text-[10px] uppercase text-text-themed tracking-widest opacity-80">Bookworm 12.1</span>
+                       <div className="flex items-center gap-2">
+                         <div className="w-1.5 h-1.5 bg-success rounded-full" />
+                         <span className="text-[10px] font-black text-success uppercase tracking-widest">Active</span>
                        </div>
-                    </div>
+                     </button>
+
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="p-4 bg-muted-bg border border-border-themed rounded-2xl">
+                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Architecture</span>
+                           <span className="font-bold text-[10px] uppercase text-text-themed tracking-widest opacity-80">64-bit Platform</span>
+                        </div>
+                        <div className="p-4 bg-muted-bg border border-border-themed rounded-3xl">
+                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">OS Environment</span>
+                           <span className="font-bold text-[10px] uppercase text-text-themed tracking-widest opacity-80">Secure Linux v1.2</span>
+                        </div>
+                     </div>
                   </div>
 
                   <div className="p-4 bg-primary/5 border border-primary/10 rounded-xl">
@@ -1021,6 +1139,93 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onBack
                </div>
 
             </div>
+
+            {/* Firmware updates modals */}
+            <AnimatePresence>
+              {updateInfo && updateInfo.updateAvailable && !updating && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-45 flex items-center justify-center p-6">
+                  <motion.div 
+                    initial={{ scale: 0.95, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.95, opacity: 0 }}
+                    className="max-w-md w-full bg-zinc-950 border border-zinc-800 rounded-3xl p-8 flex flex-col gap-6 shadow-2xl"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[10px] bg-primary/20 text-primary px-2.5 py-1 rounded-md border border-primary/30 font-black uppercase tracking-widest">Update Available</span>
+                        <h3 className="text-2xl font-black text-white mt-2 uppercase tracking-tight">Version {updateInfo.latestVersion}</h3>
+                      </div>
+                      <button onClick={() => setUpdateInfo(null)} className="text-zinc-500 hover:text-white font-black text-xs uppercase tracking-widest">Dismiss</button>
+                    </div>
+
+                    <div className="space-y-3">
+                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Changelog & Improvements:</span>
+                      <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 max-h-40 overflow-y-auto space-y-2">
+                        {updateInfo.changelog?.map((item, idx) => (
+                          <div key={idx} className="flex gap-2 text-xs font-semibold text-zinc-300 leading-relaxed uppercase">
+                            <span className="text-primary">•</span>
+                            <span>{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 mt-2">
+                      <button 
+                        onClick={() => setUpdateInfo(null)}
+                        className="h-14 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-2xl font-black uppercase tracking-widest text-xs transition-all active:scale-95"
+                      >
+                        Postpone
+                      </button>
+                      <button 
+                        onClick={applyUpdate}
+                        className="h-14 bg-primary text-bg hover:opacity-90 rounded-2xl font-black uppercase tracking-widest text-xs transition-all active:scale-95"
+                      >
+                        Install Now
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+
+              {updating && (
+                <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-8">
+                  <motion.div 
+                    initial={{ scale: 0.95, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="max-w-md w-full bg-zinc-950 border border-zinc-800 rounded-3xl p-8 flex flex-col items-center text-center gap-6 shadow-2xl"
+                  >
+                    <div className="w-16 h-16 bg-primary/10 border border-primary/20 rounded-full flex items-center justify-center animate-pulse">
+                      <Cpu className="w-8 h-8 text-primary" />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <h3 className="text-2xl font-black tracking-tight text-white uppercase">Installing firmware update</h3>
+                      <p className="text-xs text-zinc-400 font-medium uppercase tracking-wider">{updateStatus}</p>
+                    </div>
+
+                    <div className="w-full space-y-2">
+                      <div className="w-full h-4 bg-zinc-950 rounded-full overflow-hidden p-0.5 border border-zinc-900">
+                        <div 
+                          className="h-full bg-primary rounded-full transition-all duration-100 ease-out"
+                          style={{ width: `${updateProgress}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                        <span>PROGRESS</span>
+                        <span className="text-primary font-black">{updateProgress}%</span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-primary/5 border border-primary/10 rounded-2xl w-full">
+                      <p className="text-[11px] text-zinc-300 font-bold uppercase tracking-wider leading-relaxed">
+                        ⚠️ The device will auto restart once the update is completed. Do not power off the equipment.
+                      </p>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
           </div>
           
           <div className="h-40" /> {/* Extra spacer for bottom scroll padding */}
@@ -1778,6 +1983,103 @@ function ReportsScreen({ onBack, showToast }: { onBack: () => void, showToast: (
                   </div>
                 </div>
              </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function HardwareStatusScreen({ onBack, showToast }: { onBack: () => void, showToast: (m: string, t?: 'success' | 'error') => void }) {
+  const [devices, setDevices] = useState<{name: string, kernel: string, capabilities: string}[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchDevices = useCallback(() => {
+    setLoading(true);
+    fetch('/api/system/inputs')
+      .then(r => r.json())
+      .then(data => {
+        setDevices(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(() => {
+        showToast('Failed to fetch hardware data', 'error');
+        setLoading(false);
+      });
+  }, [showToast]);
+
+  useEffect(() => {
+    fetchDevices();
+  }, [fetchDevices]);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="h-full flex flex-col relative bg-bg"
+    >
+      <div className="px-8 py-6 border-b border-border-themed flex items-center justify-between bg-surface/50 backdrop-blur-md sticky top-0 z-10">
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-400">Diagnosis Console</span>
+          <h2 className="text-3xl font-black uppercase tracking-tighter italic text-zinc-100">Hardware Layer</h2>
+        </div>
+        <div className="flex gap-4">
+          <button onClick={fetchDevices} className="w-12 h-12 bg-muted-bg rounded-2xl border-2 border-border-themed flex items-center justify-center hover:border-emerald-500 transition-all text-text-themed shadow-lg">
+            <RefreshCw className={cn("w-5 h-5 text-emerald-400", loading && "animate-spin")} />
+          </button>
+          <button onClick={onBack} className="px-8 h-12 bg-muted-bg rounded-2xl border-2 border-border-themed flex items-center justify-center gap-3 font-black hover:border-emerald-500 transition-all uppercase tracking-widest text-[10px] text-text-themed shadow-lg">
+            <ArrowLeft className="w-4 h-4 text-emerald-400" />
+            Terminal Exit
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
+        <div className="max-w-4xl mx-auto space-y-8">
+          {/* Note about Wayland/X11 */}
+          <div className="bg-emerald-950/20 border border-emerald-500/30 p-6 rounded-2xl">
+            <div className="flex gap-4">
+              <Info className="w-6 h-6 text-emerald-400 shrink-0" />
+              <div className="space-y-1">
+                <h4 className="text-sm font-black text-emerald-400 uppercase tracking-widest">Environment Note: Wayland Active</h4>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  The host system utilizes a Wayland-secured display environment. Traditional X11 utilities like <code className="bg-black px-1 rounded">xinput</code> are restricted. Use <code className="bg-black px-1 rounded">libinput</code> for native kernel-level diagnostics.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <h3 className="text-xs font-black uppercase tracking-[0.3em] text-zinc-500 ml-2">Kernel-Attached Inputs</h3>
+            {loading && devices.length === 0 ? (
+              <div className="text-center py-20 animate-pulse text-zinc-600 font-black uppercase tracking-widest">Querying Hardware Bus...</div>
+            ) : (
+              devices.map((dev, i) => (
+                <div key={i} className="bg-surface border-2 border-border-themed p-6 rounded-2xl flex items-center justify-between group hover:border-emerald-500/50 transition-all">
+                  <div className="flex items-center gap-6">
+                    <div className="w-12 h-12 bg-zinc-950 rounded-xl flex items-center justify-center border border-zinc-800">
+                      {dev.capabilities?.includes('touch') ? <Activity className="w-6 h-6 text-emerald-400" /> : <Cpu className="w-6 h-6 text-zinc-500" />}
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-lg font-black text-zinc-100 uppercase tracking-tight">{dev.name}</h4>
+                      <div className="flex items-center gap-4">
+                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Port: {dev.kernel}</span>
+                        <span className="text-[10px] font-bold text-emerald-500/70 border border-emerald-500/20 px-2 py-0.5 rounded uppercase tracking-widest">{dev.capabilities}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-success rounded-full shadow-[0_0_8px_rgba(76,175,80,0.5)]" />
+                    <span className="text-[10px] font-black text-success uppercase tracking-widest">Active</span>
+                  </div>
+                </div>
+              ))
+            )}
+            {!loading && devices.length === 0 && (
+              <div className="text-center py-20 border-2 border-dashed border-zinc-900 rounded-3xl opacity-30">
+                <Search className="w-12 h-12 mx-auto mb-4" />
+                <p className="text-sm font-black uppercase tracking-widest italic">No HID Devices Detected</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

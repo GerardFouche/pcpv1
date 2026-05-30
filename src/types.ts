@@ -26,4 +26,5 @@ export type View =
   | 'admin_verify' 
   | 'admin_users' 
   | 'admin_reports'
-  | 'admin_settings';
+  | 'admin_settings'
+  | 'hardware_status';

@@ -1,6 +1,6 @@
 {
   "name": "Pill Counter PRO",
-  "description": "Vision-based pill counting interface for Raspberry Pi 5 with real-time synchronization and admin verification.",
+  "description": "Professional vision-based pharmaceutical counting interface with real-time synchronization and administrative verification console.",
   "requestFramePermissions": [
     "camera"
   ],
