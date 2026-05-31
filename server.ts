@@ -256,7 +256,7 @@ async function startServer() {
       const execAsync = promisify(exec);
 
       // nmcli -t -f ACTIVE,SSID dev wifi | grep '^yes'
-      const { stdout } = await execAsync("nmcli -t -f ACTIVE,SSID dev wifi | grep '^yes' | cut -d':' -f2");
+      const { stdout } = await execAsync("sudo nmcli -t -f ACTIVE,SSID dev wifi | grep '^yes' | cut -d':' -f2");
       const ssid = stdout.trim();
       res.json({ ssid: ssid || null });
     } catch (error: any) {
@@ -272,7 +272,7 @@ async function startServer() {
       const execAsync = promisify(exec);
 
       // nmcli -t -f SSID,SIGNAL,SECURITY dev wifi
-      const { stdout } = await execAsync("nmcli -t -f SSID,SIGNAL,SECURITY dev wifi");
+      const { stdout } = await execAsync("sudo nmcli -t -f SSID,SIGNAL,SECURITY dev wifi");
       const networks = stdout.split('\n')
         .filter(line => line.trim())
         .map(line => {
@@ -303,7 +303,7 @@ async function startServer() {
       const execAsync = promisify(exec);
 
       // nmcli dev wifi connect <SSID> password <PASSWORD>
-      const result = await execAsync(`nmcli dev wifi connect "${ssid}" password "${password}"`);
+      const result = await execAsync(`sudo nmcli dev wifi connect "${ssid}" password "${password}"`);
       res.json({ success: true, message: result.stdout });
     } catch (error: any) {
       // If we are in dev, simulate behavior

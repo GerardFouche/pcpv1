@@ -7,7 +7,7 @@ Type=simple
 User=pro
 WorkingDirectory=/home/pro/pcpv1
 ExecStart=/usr/bin/npm start
-Restart=on-failure
+Restart=always
 Environment=NODE_ENV=production
 # Fallback environment path for Node/NPM if installed via NVM or custom local bin
 Environment=PATH=/usr/local/bin:/usr/bin:/bin:/usr/games
