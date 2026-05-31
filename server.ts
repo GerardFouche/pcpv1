@@ -844,6 +844,8 @@ async function startServer() {
         console.error(`Reason: ${err.message}`);
         console.log('TIP: Ensure REPORT_EMAIL_USER matches the Google Account and REPORT_EMAIL_PASS is a 16-character App Password.');
       }
+    } else {
+      console.log('⚠️ SMTP Startup Warning: REPORT_EMAIL_PASS is missing or empty in .env. SMTP testing skipped.');
     }
   });
 }
