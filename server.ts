@@ -337,30 +337,32 @@ async function startServer() {
 
       let output = '';
       try {
-        // Step 1: Add a brand new WiFi connection profile
-        await execAsync(`sudo nmcli connection add type wifi con-name "${escapedSsid}" ssid "${escapedSsid}"`);
+        // Try direct connect first (highly reliable for visible networks when clean slate is ensured)
+        const directCmd = password 
+          ? `sudo nmcli dev wifi connect "${escapedSsid}" password "${escapedPassword}"`
+          : `sudo nmcli dev wifi connect "${escapedSsid}"`;
+        const result = await execAsync(directCmd);
+        output = result.stdout || result.stderr || 'Connected successfully';
+      } catch (directErr: any) {
+        console.warn('Direct WiFi connect failed, trying fallback manual profile creation:', directErr.message || directErr);
         
-        // Step 2: Configure the profile (setting autoconnect, key management and standard WPA PSK)
-        if (password) {
-          await execAsync(`sudo nmcli connection modify "${escapedSsid}" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "${escapedPassword}" connection.autoconnect yes`);
-        } else {
-          await execAsync(`sudo nmcli connection modify "${escapedSsid}" wifi-sec.key-mgmt none connection.autoconnect yes`);
-        }
-
-        // Step 3: Activate the connection profile
-        const activeResult = await execAsync(`sudo nmcli connection up "${escapedSsid}"`);
-        output = activeResult.stdout || activeResult.stderr || 'Connected successfully via connection profile';
-      } catch (conErr: any) {
-        console.error('Manual connection profile addition failed, falling back to direct connect:', conErr);
-        
-        // Fallback: If manual creation failed, try old direct connecting behavior
+        // Fallback: Useful for hidden SSIDs which nmcli dev wifi connect cannot see
         try {
-          const directCmd = password 
-            ? `sudo nmcli dev wifi connect "${escapedSsid}" password "${escapedPassword}"`
-            : `sudo nmcli dev wifi connect "${escapedSsid}"`;
-          const result = await execAsync(directCmd);
-          output = result.stdout;
-        } catch (directErr: any) {
+          // Step 1: Add connection profile
+          await execAsync(`sudo nmcli connection add type wifi con-name "${escapedSsid}" ssid "${escapedSsid}"`);
+          
+          // Step 2: Configure key-mgmt and secrets
+          if (password) {
+            await execAsync(`sudo nmcli connection modify "${escapedSsid}" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "${escapedPassword}" connection.autoconnect yes`);
+          } else {
+            await execAsync(`sudo nmcli connection modify "${escapedSsid}" wifi-sec.key-mgmt none connection.autoconnect yes`);
+          }
+
+          // Step 3: Up the connection
+          const activeResult = await execAsync(`sudo nmcli connection up "${escapedSsid}"`);
+          output = activeResult.stdout || activeResult.stderr || 'Connected successfully via manual profile';
+        } catch (conErr: any) {
+          // Both failed, throw original direct connect error for clearer diagnostics (e.g. wrong password)
           throw new Error(directErr.message || conErr.message);
         }
       }
