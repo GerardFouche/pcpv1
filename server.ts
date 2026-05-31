@@ -274,9 +274,11 @@ async function startServer() {
 
       // Execute pull & compile on background timer to allow response delivery to client
       setTimeout(async () => {
+        let isProd = false;
         try {
           console.log('[UPDATE] Executing fetch and update operations in shell...');
           const { stdout: gitStatus } = await execAsync('git rev-parse --is-inside-work-tree').catch(() => ({ stdout: '' }));
+          isProd = gitStatus.trim() === 'true' && process.env.NODE_ENV === 'production';
           
           if (gitStatus.trim() === 'true') {
             console.log('[UPDATE] Git workspace identified. Pulling latest code...');
@@ -299,17 +301,28 @@ async function startServer() {
               console.warn('[UPDATE] Automatic systemd service sync skipped/non-root:', syncErr.message);
             }
 
-            console.log('[UPDATE] Compile succeeded. Restarting process...');
+            console.log('[UPDATE] Compile succeeded. Preparing for restart...');
           } else {
             console.log('[UPDATE] Standalone workspace: Git environment offline. Simulating system build...');
           }
         } catch (execError: any) {
           console.error('[UPDATE] Shell execution failure during pull/build sequence:', execError.message);
         } finally {
-          console.log('[UPDATE] Initiating immediate process exit for runner reload.');
-          process.exit(0);
+          if (isProd) {
+            console.log('[UPDATE] Production Pi environment detected. Rebooting full device now via sudo reboot...');
+            try {
+              await execAsync('sudo reboot');
+            } catch (rebootErr: any) {
+              console.error('[UPDATE] Failed to execute sudo reboot:', rebootErr.message);
+              console.log('[UPDATE] Falling back to process.exit(0)');
+              process.exit(0);
+            }
+          } else {
+            console.log('[UPDATE] Non-production or development environment. Exiting node process to simulate restart.');
+            process.exit(0);
+          }
         }
-      }, 5000); // 5 seconds wait (adequate time for beautiful client visual animations)
+      }, 1000); // 1 second wait (adequate time for beautiful client visual animations to start)
 
       res.json({
         success: true,

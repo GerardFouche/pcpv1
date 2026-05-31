@@ -918,11 +918,8 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
       if (data.success) {
         setUpdateInfo(data);
         if (data.updateAvailable) {
-          showToast(`New firmware ${data.latestVersion} found! Downloading & installing automatically...`, 'success');
-          // Add a brief delay so the user can read the toast before the overlay transitions
-          setTimeout(() => {
-            applyUpdateByData(data);
-          }, 1500);
+          showToast(`New firmware version v${data.latestVersion} is available!`, 'success');
+          setCheckingUpdate(false);
         } else {
           showToast('System is currently up to date.', 'success');
           setCheckingUpdate(false);
@@ -947,33 +944,59 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
       const applyData = await res.json();
       
       if (applyData.success) {
-        // Run simulated countdown that mirrors backend's 5s reload timeout
-        const duration = 5000;
-        const stepTime = 100;
+        // Smooth 50-second visual timing that climbs to 95% and polls for reboot online confirmation
+        const duration = 50000;
+        const stepTime = 200;
         let elapsed = 0;
+        let isCheckingReboot = false;
 
-        const interval = setInterval(() => {
+        const interval = setInterval(async () => {
           elapsed += stepTime;
-          const pct = Math.min(Math.round((elapsed / duration) * 100), 100);
+          
+          let pct = Math.round((elapsed / duration) * 95);
+          if (pct >= 95) {
+            pct = 95;
+          }
           setUpdateProgress(pct);
 
-          if (pct < 25) {
+          if (pct < 20) {
             setUpdateStatus('Downloading target files from repo origin...');
-          } else if (pct < 50) {
-            setUpdateStatus('Securing persistent database state...');
-          } else if (pct < 75) {
+          } else if (pct < 45) {
+            setUpdateStatus('Securing database safe space & syncing configs...');
+          } else if (pct < 70) {
             setUpdateStatus('Compiling production codebase layers...');
-          } else if (pct < 95) {
-            setUpdateStatus('Setting up system config endpoints...');
+          } else if (pct < 90) {
+            setUpdateStatus('Rebooting Raspberry Pi device... This takes about 25 seconds.');
           } else {
-            setUpdateStatus('Reloading application systems...');
+            setUpdateStatus('Waiting for device to come back online...');
           }
 
-          if (elapsed >= duration) {
+          // Start checking if the reboot has finished of the server
+          if (pct >= 60 && !isCheckingReboot) {
+            isCheckingReboot = true;
+            const pingInterval = setInterval(async () => {
+              try {
+                const checkRes = await fetch('/api/updates/check');
+                if (checkRes.ok) {
+                  clearInterval(pingInterval);
+                  clearInterval(interval);
+                  setUpdateProgress(100);
+                  setUpdateStatus('Update successfully applied! Reloading...');
+                  showToast('Firmware update applied successfully!', 'success');
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 1500);
+                }
+              } catch {
+                // Expected failure while device is offline rebooting
+              }
+            }, 2500);
+          }
+
+          // Fail-safe: if 70 seconds passed and still offline, we try reload
+          if (elapsed >= 70000) {
             clearInterval(interval);
-            setTimeout(() => {
-              window.location.reload();
-            }, 1000);
+            window.location.reload();
           }
         }, stepTime);
       } else {
