@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
@@ -6,6 +7,11 @@ import nodemailer from 'nodemailer';
 import cron from 'node-cron';
 import os from 'os';
 import fs from 'fs';
+
+// Load environment variables from .env file immediately
+dotenv.config();
+// Handily support location resolution when running compiled bundle (dist) or cwd folder
+dotenv.config({ path: path.join(process.cwd(), '.env') });
 
 async function startServer() {
   const app = express();
@@ -279,6 +285,20 @@ async function startServer() {
             console.log('[UPDATE] Files updated. Building assets with npm...');
             await execAsync('npm install');
             await execAsync('npm run build');
+
+            // Automatically check and sync the systemd service file if running in production on the Pi
+            try {
+              const serviceFilePath = path.join(process.cwd(), 'pill-counter.service');
+              if (fs.existsSync(serviceFilePath)) {
+                console.log('[UPDATE] Production detected: Syncing systemd service configuration...');
+                await execAsync(`sudo cp ${serviceFilePath} /etc/systemd/system/pill-counter.service`);
+                await execAsync('sudo systemctl daemon-reload');
+                console.log('[UPDATE] systemd service file updated and reloaded successfully.');
+              }
+            } catch (syncErr: any) {
+              console.warn('[UPDATE] Automatic systemd service sync skipped/non-root:', syncErr.message);
+            }
+
             console.log('[UPDATE] Compile succeeded. Restarting process...');
           } else {
             console.log('[UPDATE] Standalone workspace: Git environment offline. Simulating system build...');

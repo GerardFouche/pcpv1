@@ -1300,36 +1300,6 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
                 animate={{ height: 'auto', opacity: 1 }} 
                 className="p-6 border-t border-border-themed space-y-6 bg-muted-bg/10"
               >
-                {/* Theme Selection */}
-                <div className="p-4 bg-bg/40 border border-border-themed rounded-2xl flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Display Appearance Theme</span>
-                    <span className="text-xs font-black text-text-themed tracking-tight">Configure interface visual mode</span>
-                  </div>
-                  <div className="flex bg-bg p-1 rounded-xl border border-border-themed">
-                    <button 
-                      onClick={() => setThemeMode('light')}
-                      className={cn(
-                        "px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all",
-                        theme === 'light' ? "bg-primary text-bg" : "text-zinc-500 hover:text-text-themed"
-                      )}
-                    >
-                      <Sun className="w-3.5 h-3.5" />
-                      Light
-                    </button>
-                    <button 
-                      onClick={() => setThemeMode('dark')}
-                      className={cn(
-                        "px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all",
-                        theme === 'dark' ? "bg-primary text-bg" : "text-zinc-500 hover:text-text-themed"
-                      )}
-                    >
-                      <Moon className="w-3.5 h-3.5" />
-                      Dark
-                    </button>
-                  </div>
-                </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-5 bg-bg/40 border border-border-themed rounded-2xl flex justify-between items-center">
                     <div className="flex flex-col">
