@@ -1,0 +1,22 @@
+[Unit]
+Description=Pill Counter PRO GUI Kiosk (Cage)
+After=pill-counter.service systemd-user-sessions.service plymouth-quit-active.service getty@tty1.service
+Wants=pill-counter.service systemd-user-sessions.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+User=pro
+PAMName=login
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty1
+UtmpMode=user
+ExecStart=/usr/bin/cage -- /home/pro/start-kiosk.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

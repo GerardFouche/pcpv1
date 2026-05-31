@@ -59,8 +59,9 @@ body {
   overflow: hidden;
 }
 
-/* Ensure no bounce on touch */
+/* Ensure no bounce on touch and hide cursor */
 html, body {
   overscroll-behavior: none;
+  cursor: none !important;
 }
 

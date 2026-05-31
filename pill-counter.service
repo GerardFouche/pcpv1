@@ -1,0 +1,16 @@
+[Unit]
+Description=Pill Counter PRO Backend Service
+After=network.target
+
+[Service]
+Type=simple
+User=pro
+WorkingDirectory=/home/pro/pcpv1
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+Environment=NODE_ENV=production
+# Fallback environment path for Node/NPM if installed via NVM or custom local bin
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/usr/games
+
+[Install]
+WantedBy=multi-user.target
