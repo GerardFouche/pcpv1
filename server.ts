@@ -302,9 +302,70 @@ async function startServer() {
       const { promisify } = await import('util');
       const execAsync = promisify(exec);
 
-      // nmcli dev wifi connect <SSID> password <PASSWORD>
-      const result = await execAsync(`sudo nmcli dev wifi connect "${ssid}" password "${password}"`);
-      res.json({ success: true, message: result.stdout });
+      // Helper to escape double quotes and backslashes in shell arguments
+      const escapeShellArg = (arg: string): string => {
+        return arg.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      };
+
+      const escapedSsid = escapeShellArg(ssid);
+      const escapedPassword = password ? escapeShellArg(password) : '';
+
+      // Delete any pre-existing connection profiles that match either the SSID or name.
+      // This prevents profile congestion, mismatched configurations, and ensures a clean slate.
+      try {
+        const { stdout: connList } = await execAsync(`sudo nmcli --terse --fields NAME,UUID,SSID connection show`);
+        const lines = connList.split('\n');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const [name, uuid, connSsid] = line.split(':');
+          if (connSsid === ssid || name === ssid) {
+            try {
+              await execAsync(`sudo nmcli connection delete uuid "${uuid}"`);
+            } catch (err) {
+              // Silently ignore if a single deletion fails
+            }
+          }
+        }
+      } catch (findErr) {
+        // Fallback: try deleting by con-name directly
+        try {
+          await execAsync(`sudo nmcli connection delete "${escapedSsid}"`);
+        } catch (err) {
+          // Ignore if no connection existed
+        }
+      }
+
+      let output = '';
+      try {
+        // Step 1: Add a brand new WiFi connection profile
+        await execAsync(`sudo nmcli connection add type wifi con-name "${escapedSsid}" ssid "${escapedSsid}"`);
+        
+        // Step 2: Configure the profile (setting autoconnect, key management and standard WPA PSK)
+        if (password) {
+          await execAsync(`sudo nmcli connection modify "${escapedSsid}" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "${escapedPassword}" connection.autoconnect yes`);
+        } else {
+          await execAsync(`sudo nmcli connection modify "${escapedSsid}" wifi-sec.key-mgmt none connection.autoconnect yes`);
+        }
+
+        // Step 3: Activate the connection profile
+        const activeResult = await execAsync(`sudo nmcli connection up "${escapedSsid}"`);
+        output = activeResult.stdout || activeResult.stderr || 'Connected successfully via connection profile';
+      } catch (conErr: any) {
+        console.error('Manual connection profile addition failed, falling back to direct connect:', conErr);
+        
+        // Fallback: If manual creation failed, try old direct connecting behavior
+        try {
+          const directCmd = password 
+            ? `sudo nmcli dev wifi connect "${escapedSsid}" password "${escapedPassword}"`
+            : `sudo nmcli dev wifi connect "${escapedSsid}"`;
+          const result = await execAsync(directCmd);
+          output = result.stdout;
+        } catch (directErr: any) {
+          throw new Error(directErr.message || conErr.message);
+        }
+      }
+
+      res.json({ success: true, message: output });
     } catch (error: any) {
       // If we are in dev, simulate behavior
       if (process.env.NODE_ENV !== 'production' || error.message.includes('not found')) {
