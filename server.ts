@@ -583,6 +583,30 @@ async function startServer() {
     }
   });
 
+  app.get('/api/system/ip', (req, res) => {
+    try {
+      const nets = os.networkInterfaces();
+      const ipList: string[] = [];
+      
+      for (const name of Object.keys(nets)) {
+        const netList = nets[name];
+        if (netList) {
+          for (const net of netList) {
+            const item = net as any;
+            const familyV4 = typeof item.family === 'string' ? item.family === 'IPv4' : item.family === 4;
+            if (familyV4 && !item.internal) {
+              ipList.push(`${name}: ${item.address}`);
+            }
+          }
+        }
+      }
+      
+      res.json({ ip: ipList.length > 0 ? ipList.join(' | ') : 'No connection/Offline' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Failed to fetch IP' });
+    }
+  });
+
   app.post('/api/records', (req, res) => {
     const { user, med, count, time, image = '' } = req.body;
     db.prepare('INSERT INTO records (user, med, count, time, verified, image) VALUES (?, ?, ?, ?, 0, ?)').run(user, med, count, time, image);

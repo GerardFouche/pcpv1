@@ -814,6 +814,39 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
   const [deviceName, setDeviceName] = useState('Loading...');
   const [rebootStep, setRebootStep] = useState(0); // 0: idle, 1: confirming, 2: acting
   const [shutdownStep, setShutdownStep] = useState(0); // 0: idle, 1: confirming, 2: acting
+  const [expandedSection, setExpandedSection] = useState<'wifi' | 'hardware' | 'identity' | 'power' | null>('wifi');
+  const [hardwareDevices, setHardwareDevices] = useState<{name: string, kernel: string, capabilities: string}[]>([]);
+  const [deviceIp, setDeviceIp] = useState('Fetching...');
+  const [loadingHardware, setLoadingHardware] = useState(false);
+  const [powerActionConfirm, setPowerActionConfirm] = useState<'reboot' | 'shutdown' | null>(null);
+
+  const fetchHardwareDevices = useCallback(() => {
+    setLoadingHardware(true);
+    fetch('/api/system/inputs')
+      .then(r => r.json())
+      .then(data => {
+        setHardwareDevices(Array.isArray(data) ? data : []);
+        setLoadingHardware(false);
+      })
+      .catch(() => {
+        setLoadingHardware(false);
+      });
+
+    fetch('/api/system/ip')
+      .then(r => r.json())
+      .then(data => {
+        setDeviceIp(data.ip || 'No connection/Offline');
+      })
+      .catch(() => {
+        setDeviceIp('Failed to load IP');
+      });
+  }, []);
+
+  useEffect(() => {
+    if (expandedSection === 'hardware') {
+      fetchHardwareDevices();
+    }
+  }, [expandedSection, fetchHardwareDevices]);
 
   // Core Self-Update Engine states
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -1029,288 +1062,521 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
       </div>
 
       <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-        <div className="max-w-6xl mx-auto space-y-8">
-          <div className="grid grid-cols-2 gap-8 items-start">
-            {/* WiFi Section */}
-            <div className="bg-surface rounded-3xl border border-border-themed p-8 flex flex-col gap-6 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                   <Wifi className="w-6 h-6 text-primary" />
-                   <h3 className="text-xl font-black uppercase tracking-tight text-text-themed">Wireless Networks</h3>
-                </div>
-                <button 
-                  onClick={scanWifi} 
-                  disabled={scanning}
-                  className="px-6 h-10 bg-primary/10 border border-primary/20 text-primary rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 disabled:opacity-50"
-                >
-                  {scanning ? 'Scanning...' : 'Refresh List'}
-                </button>
-              </div>
+        <div className="max-w-4xl mx-auto space-y-6">
 
-              <div className={cn(
-                "rounded-2xl p-4 flex items-center justify-between border",
-                currentSsid ? "bg-success/5 border-success/20" : "bg-red-500/5 border-red-500/20"
-              )}>
-                <div className="flex flex-col">
-                  <span className={cn(
-                    "text-[10px] font-bold uppercase tracking-widest mb-1",
-                    currentSsid ? "text-success/60" : "text-red-500/60"
-                  )}>
-                    {currentSsid ? 'Active Connection' : 'Connection Status'}
-                  </span>
-                  <span className={cn(
-                    "text-xl font-black tracking-tighter",
-                    currentSsid ? "text-success" : "text-red-500/80"
-                  )}>
-                    {currentSsid || 'NOT CONNECTED'}
-                  </span>
+          {/* 1. Wireless Networks Section */}
+          <div className="bg-surface rounded-3xl border border-border-themed overflow-hidden shadow-sm">
+            <button 
+              onClick={() => setExpandedSection(expandedSection === 'wifi' ? null : 'wifi')}
+              className="w-full p-6 flex items-center justify-between text-left hover:bg-muted-bg/30 transition-colors focus:outline-none"
+            >
+              <div className="flex items-center gap-4">
+                <Wifi className="w-6 h-6 text-primary" />
+                <div>
+                  <h3 className="text-lg font-black uppercase tracking-tight text-text-themed">Wireless Networks</h3>
+                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">
+                    {currentSsid ? `Connected to ${currentSsid}` : 'Status: Disconnected'}
+                  </p>
                 </div>
+              </div>
+              <div className="flex items-center gap-4">
                 {currentSsid ? (
-                  <div className="flex items-end gap-1 h-5">
-                    <div className="w-1 h-2 bg-success rounded-full" />
-                    <div className="w-1 h-3 bg-success rounded-full" />
-                    <div className="w-1 h-4 bg-success rounded-full" />
-                    <div className="w-1 h-5 bg-success rounded-full" />
-                  </div>
+                  <span className="px-2.5 py-0.5 bg-success/20 text-success text-[8px] font-black rounded-md border border-success/30 uppercase tracking-widest">Connected</span>
                 ) : (
-                  <WifiOff className="w-8 h-8 text-red-500/30" />
+                  <span className="px-2.5 py-0.5 bg-red-500/10 text-red-400 text-[8px] font-black rounded-md border border-red-500/20 uppercase tracking-widest">Offline</span>
                 )}
+                {expandedSection === 'wifi' ? <ChevronUp className="w-5 h-5 text-zinc-500" /> : <ChevronDown className="w-5 h-5 text-zinc-500" />}
               </div>
+            </button>
 
-              <div className="max-h-[400px] overflow-y-auto custom-scrollbar border border-border-themed rounded-xl bg-muted-bg p-4 space-y-2">
-                {networks.length === 0 && !scanning && (
-                  <div className="py-20 flex flex-col items-center justify-center text-zinc-500 gap-4 opacity-50 grayscale">
-                     <Search className="w-12 h-12" />
-                     <span className="text-[10px] font-black uppercase tracking-widest text-center">Touch "Refresh List" to scan nearby signals</span>
+            {expandedSection === 'wifi' && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }} 
+                animate={{ height: 'auto', opacity: 1 }} 
+                className="p-6 border-t border-border-themed space-y-6 bg-muted-bg/10"
+              >
+                <div className="flex items-center justify-between bg-bg/40 p-4 rounded-2xl border border-border-themed">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Active SSID</span>
+                    <span className={cn("text-lg font-black tracking-tighter", currentSsid ? "text-success" : "text-zinc-500")}>
+                      {currentSsid || 'NOT CONNECTED'}
+                    </span>
                   </div>
-                )}
-                {networks.map((n, i) => (
                   <button 
-                    key={`${n.ssid}-${i}`} 
-                    onClick={() => { setSelectedNetwork(n.ssid); setPassword(''); setShowPassword(false); }}
-                    className={cn(
-                      "w-full p-4 rounded-xl flex items-center justify-between border transition-all",
-                      selectedNetwork === n.ssid ? "bg-primary/20 border-primary shadow-lg" : "bg-bg/40 border-border-themed hover:border-primary/50"
-                    )}
+                    onClick={scanWifi} 
+                    disabled={scanning}
+                    className="px-5 h-11 bg-primary text-bg rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-opacity-90 disabled:opacity-50 transition-all flex items-center gap-2"
                   >
-                    <div className="flex items-center gap-4">
-                      {n.secure ? <Lock className="w-4 h-4 text-zinc-500" /> : <Wifi className="w-4 h-4 text-zinc-500" />}
-                      <span className="font-bold text-sm tracking-tight text-text-themed">{n.ssid}</span>
-                      {currentSsid === n.ssid && (
-                         <span className="px-2 py-0.5 bg-success/20 text-success text-[8px] font-black rounded-md border border-success/30 uppercase tracking-widest">Connected</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Signal className="w-4 h-4 text-primary" />
-                      <span className="text-[10px] font-black text-zinc-500">{n.strength}%</span>
-                    </div>
+                    <RefreshCw className={cn("w-3.5 h-3.5", scanning && "animate-spin")} />
+                    {scanning ? 'Scanning...' : 'Scan Nearby'}
                   </button>
-                ))}
-              </div>
+                </div>
 
-              {selectedNetwork && (
-                <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="space-y-4 pt-4 border-t border-border-themed">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Connect to: {selectedNetwork}</span>
-                    <button onClick={() => { setSelectedNetwork(null); setPassword(''); setShowPassword(false); }} className="text-[10px] text-zinc-500 hover:text-primary uppercase font-black">Cancel</button>
+                <div className="space-y-2">
+                  <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Available Hotspots:</span>
+                  <div className="max-h-[250px] overflow-y-auto custom-scrollbar border border-border-themed rounded-2xl bg-bg/30 p-4 space-y-2">
+                    {networks.length === 0 && !scanning && (
+                      <div className="py-12 flex flex-col items-center justify-center text-zinc-500 gap-3 opacity-50">
+                        <Search className="w-10 h-10" />
+                        <span className="text-[9px] font-black uppercase tracking-widest text-center">Click "Scan Nearby" to locate wireless signals</span>
+                      </div>
+                    )}
+                    {networks.map((n, i) => (
+                      <button 
+                        key={`${n.ssid}-${i}`} 
+                        onClick={() => { setSelectedNetwork(n.ssid); setPassword(''); setShowPassword(false); }}
+                        className={cn(
+                          "w-full p-4 rounded-xl flex items-center justify-between border transition-all",
+                          selectedNetwork === n.ssid ? "bg-primary/10 border-primary shadow-md" : "bg-bg/40 border-border-themed hover:border-primary/50"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          {n.secure ? <Lock className="w-3.5 h-3.5 text-zinc-500" /> : <Wifi className="w-3.5 h-3.5 text-zinc-500" />}
+                          <span className="font-bold text-xs tracking-tight text-text-themed">{n.ssid}</span>
+                          {currentSsid === n.ssid && (
+                            <span className="px-2 py-0.5 bg-success/20 text-success text-[7px] font-black rounded-md border border-success/30 uppercase tracking-widest">Active</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Signal className="w-3.5 h-3.5 text-primary" />
+                          <span className="text-[9px] font-black text-zinc-500">{n.strength}%</span>
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                  <div className="relative flex items-center">
-                    <input 
-                      type={showPassword ? "text" : "password"} 
-                      placeholder="Network Password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full h-14 bg-bg border border-border-themed rounded-xl pl-4 pr-12 text-sm font-bold focus:border-primary outline-none text-text-themed"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 text-zinc-400 hover:text-primary transition-colors focus:outline-none"
+                </div>
+
+                {selectedNetwork && (
+                  <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="space-y-4 pt-4 border-t border-border-themed">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Connect to: {selectedNetwork}</span>
+                      <button onClick={() => { setSelectedNetwork(null); setPassword(''); setShowPassword(false); }} className="text-[10px] text-zinc-400 hover:text-primary uppercase font-black">Cancel</button>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input 
+                        type={showPassword ? "text" : "password"} 
+                        placeholder="Security Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full h-14 bg-bg border border-border-themed rounded-xl pl-4 pr-12 text-sm font-bold focus:border-primary outline-none text-text-themed"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 text-zinc-400 hover:text-primary transition-colors focus:outline-none"
+                      >
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                    <button 
+                      onClick={connectWifi}
+                      disabled={connecting}
+                      className="w-full h-14 bg-primary text-bg rounded-xl font-black uppercase tracking-widest text-xs hover:opacity-95 disabled:opacity-50 transition-all flex items-center justify-center shadow-lg"
                     >
-                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      {connecting ? 'Requesting IP Lease...' : 'Initialize Secure Connection'}
+                    </button>
+                  </motion.div>
+                )}
+              </motion.div>
+            )}
+          </div>
+
+          {/* 2. Hardware Diagnostics Section */}
+          <div className="bg-surface rounded-3xl border border-border-themed overflow-hidden shadow-sm">
+            <button 
+              onClick={() => setExpandedSection(expandedSection === 'hardware' ? null : 'hardware')}
+              className="w-full p-6 flex items-center justify-between text-left hover:bg-muted-bg/30 transition-colors focus:outline-none"
+            >
+              <div className="flex items-center gap-4">
+                <Activity className="w-6 h-6 text-emerald-400" />
+                <div>
+                  <h3 className="text-lg font-black uppercase tracking-tight text-text-themed">Hardware Diagnostics</h3>
+                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Peripherals & Kernel input status</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                {expandedSection === 'hardware' ? <ChevronUp className="w-5 h-5 text-zinc-500" /> : <ChevronDown className="w-5 h-5 text-zinc-500" />}
+              </div>
+            </button>
+
+            {expandedSection === 'hardware' && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }} 
+                animate={{ height: 'auto', opacity: 1 }} 
+                className="p-6 border-t border-border-themed space-y-6 bg-muted-bg/10"
+              >
+                <div className="bg-emerald-950/10 border border-emerald-500/20 p-4 rounded-xl flex gap-3">
+                  <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-zinc-400 leading-relaxed font-semibold uppercase">
+                    The host system utilizes a Wayland-secured display environment. Kernel input diagnostics analyze low-level bus attachments to verify touch overlay performance.
+                  </p>
+                </div>
+
+                {/* Device IP Address Display */}
+                <div className="p-5 bg-bg/40 border border-border-themed rounded-2xl flex justify-between items-center">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">My IP Address</span>
+                    <span className="text-sm font-black text-emerald-400 tracking-tight font-mono">{deviceIp}</span>
+                  </div>
+                  <div className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-800">
+                    <Globe className="w-4 h-4 text-emerald-400" />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Active Input Bus:</span>
+                  <div className="space-y-2 border border-border-themed rounded-2xl bg-bg/30 p-4 max-h-[250px] overflow-y-auto custom-scrollbar">
+                    {loadingHardware && hardwareDevices.length === 0 ? (
+                      <div className="py-12 text-center text-xs font-black uppercase tracking-widest text-zinc-500 animate-pulse">Querying Hardware Bus...</div>
+                    ) : hardwareDevices.length === 0 ? (
+                      <div className="py-12 text-center text-xs font-black uppercase tracking-widest text-zinc-500 opacity-60">No attached HID input devices detected.</div>
+                    ) : (
+                      hardwareDevices.map((dev, idx) => (
+                        <div key={idx} className="bg-bg/40 border-2 border-border-themed p-4 rounded-xl flex items-center justify-between hover:border-emerald-500/30 transition-all">
+                          <div className="flex items-center gap-4">
+                            <div className="w-8 h-8 bg-zinc-950 rounded-lg border border-zinc-800 flex items-center justify-center">
+                              {dev.capabilities?.includes('touch') ? <Activity className="w-4 h-4 text-emerald-400" /> : <Cpu className="w-4 h-4 text-zinc-500" />}
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-black text-text-themed uppercase tracking-tight">{dev.name}</h4>
+                              <div className="flex items-center gap-3 mt-1">
+                                <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest">Port: {dev.kernel}</span>
+                                <span className="text-[8px] font-bold text-emerald-400/80 uppercase tracking-widest">{dev.capabilities}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-1.5 h-1.5 bg-success rounded-full" />
+                            <span className="text-[8px] font-black text-success uppercase tracking-widest">Active</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <button 
+                    onClick={fetchHardwareDevices}
+                    disabled={loadingHardware}
+                    className="h-12 bg-muted-bg border border-border-themed hover:border-primary/50 text-text-themed font-black text-xs uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className={cn("w-4 h-4 text-primary", loadingHardware && "animate-spin")} />
+                    {loadingHardware ? 'Refreshing Bus...' : 'Refresh Input Peripherals'}
+                  </button>
+                  <button 
+                    onClick={onHardware}
+                    className="h-12 bg-primary/10 border border-primary/20 hover:bg-primary/20 text-primary font-black text-xs uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Full Screen Diagnostics Terminal
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </div>
+
+          {/* 3. System Identity & Updates Section */}
+          <div className="bg-surface rounded-3xl border border-border-themed overflow-hidden shadow-sm">
+            <button 
+              onClick={() => setExpandedSection(expandedSection === 'identity' ? null : 'identity')}
+              className="w-full p-6 flex items-center justify-between text-left hover:bg-muted-bg/30 transition-colors focus:outline-none"
+            >
+              <div className="flex items-center gap-4">
+                <Cpu className="w-6 h-6 text-blue-400" />
+                <div>
+                  <h3 className="text-lg font-black uppercase tracking-tight text-text-themed">System Identity</h3>
+                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">{deviceName} • PCPv1.1</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                {expandedSection === 'identity' ? <ChevronUp className="w-5 h-5 text-zinc-500" /> : <ChevronDown className="w-5 h-5 text-zinc-500" />}
+              </div>
+            </button>
+
+            {expandedSection === 'identity' && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }} 
+                animate={{ height: 'auto', opacity: 1 }} 
+                className="p-6 border-t border-border-themed space-y-6 bg-muted-bg/10"
+              >
+                {/* Theme Selection */}
+                <div className="p-4 bg-bg/40 border border-border-themed rounded-2xl flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Display Appearance Theme</span>
+                    <span className="text-xs font-black text-text-themed tracking-tight">Configure interface visual mode</span>
+                  </div>
+                  <div className="flex bg-bg p-1 rounded-xl border border-border-themed">
+                    <button 
+                      onClick={() => setThemeMode('light')}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all",
+                        theme === 'light' ? "bg-primary text-bg" : "text-zinc-500 hover:text-text-themed"
+                      )}
+                    >
+                      <Sun className="w-3.5 h-3.5" />
+                      Light
+                    </button>
+                    <button 
+                      onClick={() => setThemeMode('dark')}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all",
+                        theme === 'dark' ? "bg-primary text-bg" : "text-zinc-500 hover:text-text-themed"
+                      )}
+                    >
+                      <Moon className="w-3.5 h-3.5" />
+                      Dark
                     </button>
                   </div>
-                  <button 
-                    onClick={connectWifi}
-                    disabled={connecting}
-                    className="w-full h-14 bg-primary text-bg rounded-xl font-black uppercase tracking-widest text-sm hover:opacity-90 disabled:opacity-50"
-                  >
-                    {connecting ? 'Establishing Connection...' : 'Connect Now'}
-                  </button>
-                </motion.div>
-              )}
-            </div>
-
-            {/* System Info & Appearance */}
-            <div className="flex flex-col gap-8">
-               <div className="bg-surface rounded-3xl border border-border-themed p-8 flex flex-col gap-6 shadow-sm">
-                  <div className="flex items-center gap-3">
-                     <Cpu className="w-6 h-6 text-primary" />
-                     <h3 className="text-xl font-black uppercase tracking-tight text-text-themed">System Identity</h3>
-                  </div>
-
-                  <div className="space-y-4">
-                     <div className="p-6 bg-muted-bg border border-border-themed rounded-2xl flex items-center justify-between">
-                        <div className="flex flex-col">
-                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Device Name</span>
-                           <span className="text-2xl font-black text-text-themed tracking-tighter">{deviceName}</span>
-                        </div>
-                        <div className="bg-bg/50 p-2 rounded-lg">
-                           <Lock className="w-5 h-5 text-zinc-500" />
-                        </div>
-                     </div>
-
-                     <div className="p-6 bg-muted-bg border border-border-themed rounded-2xl flex items-center justify-between">
-                        <div className="flex flex-col">
-                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Current Version</span>
-                           <span className="text-2xl font-black text-text-themed tracking-tighter">PCPv1.1</span>
-                        </div>
-                        <button 
-                          onClick={checkForUpdates}
-                          disabled={checkingUpdate}
-                          className="px-5 h-12 bg-primary hover:opacity-95 text-bg font-black text-xs uppercase tracking-widest rounded-xl transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center shadow-lg"
-                        >
-                          {checkingUpdate ? 'Checking...' : 'Check Updates'}
-                        </button>
-                     </div>
-
-                     <button 
-                       onClick={onHardware}
-                       className="w-full h-16 bg-muted-bg border-2 border-border-themed hover:border-primary/50 rounded-2xl flex items-center justify-between px-6 transition-all group"
-                     >
-                       <div className="flex items-center gap-4">
-                         <div className="bg-zinc-950 p-2 rounded-xl border border-zinc-800 group-hover:border-primary/30 transition-all">
-                           <Cpu className="w-5 h-5 text-emerald-400" />
-                         </div>
-                         <span className="font-black text-sm uppercase tracking-widest text-text-themed">Hardware Diagnostics</span>
-                       </div>
-                       <div className="flex items-center gap-2">
-                         <div className="w-1.5 h-1.5 bg-success rounded-full" />
-                         <span className="text-[10px] font-black text-success uppercase tracking-widest">Active</span>
-                       </div>
-                     </button>
-
-                     <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 bg-muted-bg border border-border-themed rounded-2xl">
-                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Architecture</span>
-                           <span className="font-bold text-[10px] uppercase text-text-themed tracking-widest opacity-80">64-bit Platform</span>
-                        </div>
-                        <div className="p-4 bg-muted-bg border border-border-themed rounded-3xl">
-                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">OS Environment</span>
-                           <span className="font-bold text-[10px] uppercase text-text-themed tracking-widest opacity-80">Secure Linux v1.2</span>
-                        </div>
-                     </div>
-                  </div>
-
-                  <div className="p-4 bg-primary/5 border border-primary/10 rounded-xl">
-                     <div className="flex items-start gap-3">
-                        <AlertCircle className="w-4 h-4 text-primary shrink-0" />
-                        <p className="text-[10px] text-zinc-400 leading-relaxed font-medium uppercase">
-                           Device name is write-protected. Modifications must be performed through the <span className="text-primary font-bold">Admin Panel</span>.
-                        </p>
-                     </div>
-                  </div>
-               </div>
-
-               {/* Power Controls */}
-               <div className="bg-surface rounded-3xl border border-border-themed p-8 flex flex-col gap-6 shadow-sm">
-                  <div className="flex items-center gap-3">
-                     <Power className="w-6 h-6 text-red-500/90" />
-                     <h3 className="text-xl font-black uppercase tracking-tight text-text-themed">Power Management</h3>
-                  </div>
-
-                  <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider leading-relaxed">
-                     Perform safe system restarts or shutdowns. Ensure medication count sessions are saved before executing.
-                  </p>
-
-                  <div className="grid grid-cols-2 gap-4">
-                     {/* Reboot button */}
-                     <button
-                        onClick={handleReboot}
-                        disabled={rebootStep === 2}
-                        className={cn(
-                           "h-16 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 border-2",
-                           rebootStep === 0 && "bg-muted-bg border-border-themed hover:border-emerald-500/50 text-text-themed",
-                           rebootStep === 1 && "bg-emerald-950 border-emerald-500/80 text-emerald-400 animate-pulse",
-                           rebootStep === 2 && "bg-bg border-emerald-500/20 text-zinc-500 cursor-not-allowed"
-                        )}
-                     >
-                        <RefreshCw className={cn("w-4 h-4 text-emerald-400", rebootStep === 1 && "animate-spin")} />
-                        {rebootStep === 0 && "Reboot Device"}
-                        {rebootStep === 1 && "Tap to Confirm"}
-                        {rebootStep === 2 && "Powering Cycle..."}
-                     </button>
-
-                     {/* Shutdown button */}
-                     <button
-                        onClick={handleShutdown}
-                        disabled={shutdownStep === 2}
-                        className={cn(
-                           "h-16 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 border-2",
-                           shutdownStep === 0 && "bg-muted-bg border-border-themed hover:border-red-500/50 text-text-themed",
-                           shutdownStep === 1 && "bg-red-950 border-red-500/80 text-red-400 animate-pulse",
-                           shutdownStep === 2 && "bg-bg border-red-500/20 text-zinc-500 cursor-not-allowed"
-                        )}
-                     >
-                        <Power className="w-4 h-4 text-red-500" />
-                        {shutdownStep === 0 && "Shut Down"}
-                        {shutdownStep === 1 && "Tap to Confirm"}
-                        {shutdownStep === 2 && "Halting OS..."}
-                     </button>
-                  </div>
-               </div>
-
-            </div>
-
-            {/* Firmware updates modals */}
-            <AnimatePresence>
-              {updateInfo && updateInfo.updateAvailable && !updating && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-45 flex items-center justify-center p-6">
-                  <motion.div 
-                    initial={{ scale: 0.95, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.95, opacity: 0 }}
-                    className="max-w-md w-full bg-zinc-950 border border-zinc-800 rounded-3xl p-8 flex flex-col gap-6 shadow-2xl"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className="text-[10px] bg-primary/20 text-primary px-2.5 py-1 rounded-md border border-primary/30 font-black uppercase tracking-widest">Update Available</span>
-                        <h3 className="text-2xl font-black text-white mt-2 uppercase tracking-tight">Version {updateInfo.latestVersion}</h3>
-                      </div>
-                      <button onClick={() => setUpdateInfo(null)} className="text-zinc-500 hover:text-white font-black text-xs uppercase tracking-widest">Dismiss</button>
-                    </div>
-
-                    <div className="space-y-3">
-                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Changelog & Improvements:</span>
-                      <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 max-h-40 overflow-y-auto space-y-2">
-                        {updateInfo.changelog?.map((item, idx) => (
-                          <div key={idx} className="flex gap-2 text-xs font-semibold text-zinc-300 leading-relaxed uppercase">
-                            <span className="text-primary">•</span>
-                            <span>{item}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 mt-2">
-                      <button 
-                        onClick={() => setUpdateInfo(null)}
-                        className="h-14 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-2xl font-black uppercase tracking-widest text-xs transition-all active:scale-95"
-                      >
-                        Postpone
-                      </button>
-                      <button 
-                        onClick={applyUpdate}
-                        className="h-14 bg-primary text-bg hover:opacity-90 rounded-2xl font-black uppercase tracking-widest text-xs transition-all active:scale-95"
-                      >
-                        Install Now
-                      </button>
-                    </div>
-                  </motion.div>
                 </div>
-              )}
 
-              {updating && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-5 bg-bg/40 border border-border-themed rounded-2xl flex justify-between items-center">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Device Host Name</span>
+                      <span className="text-lg font-black text-text-themed tracking-tighter">{deviceName}</span>
+                    </div>
+                    <Lock className="w-4 h-4 text-zinc-600 shrink-0" />
+                  </div>
+
+                  <div className="p-5 bg-bg/40 border border-border-themed rounded-2xl flex justify-between items-center">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Current Version</span>
+                      <span className="text-lg font-black text-text-themed tracking-tighter">PCPv1.1</span>
+                    </div>
+                    <button 
+                      onClick={checkForUpdates}
+                      disabled={checkingUpdate}
+                      className="px-4 h-10 bg-primary hover:opacity-95 text-bg font-black text-[9px] uppercase tracking-widest rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-md"
+                    >
+                      {checkingUpdate ? 'Checking...' : 'Check Updates'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-bg/20 border border-border-themed rounded-xl">
+                    <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Architecture</span>
+                    <span className="font-bold text-[9px] uppercase text-text-themed tracking-widest opacity-80">64-bit Platform</span>
+                  </div>
+                  <div className="p-4 bg-bg/20 border border-border-themed rounded-xl">
+                    <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">OS Environment</span>
+                    <span className="font-bold text-[9px] uppercase text-text-themed tracking-widest opacity-80">Secure Linux v1.2</span>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-primary/5 border border-primary/10 rounded-xl">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-zinc-400 leading-relaxed font-semibold uppercase">
+                      Device settings are write-protected. System alterations must be requested through authorization in the <span className="text-primary font-bold">Admin Panel</span>.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </div>
+
+          {/* 4. Power Management Section */}
+          <div className="bg-surface rounded-3xl border border-border-themed overflow-hidden shadow-sm">
+            <button 
+              onClick={() => setExpandedSection(expandedSection === 'power' ? null : 'power')}
+              className="w-full p-6 flex items-center justify-between text-left hover:bg-muted-bg/30 transition-colors focus:outline-none"
+            >
+              <div className="flex items-center gap-4">
+                <Power className="w-6 h-6 text-red-500" />
+                <div>
+                  <h3 className="text-lg font-black uppercase tracking-tight text-text-themed">Power Management</h3>
+                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Device restart & shutdown controls</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                {expandedSection === 'power' ? <ChevronUp className="w-5 h-5 text-zinc-500" /> : <ChevronDown className="w-5 h-5 text-zinc-500" />}
+              </div>
+            </button>
+
+            {expandedSection === 'power' && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }} 
+                animate={{ height: 'auto', opacity: 1 }} 
+                className="p-6 border-t border-border-themed space-y-6 bg-muted-bg/10"
+              >
+                <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider leading-relaxed">
+                  Perform safe system restarts or shutdowns. Ensure all ongoing medication counting sessions have been successfully completed and recorded before execution.
+                </p>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Reboot Button - Opens touchconfirm overlay */}
+                  <button
+                    onClick={() => setPowerActionConfirm('reboot')}
+                    disabled={rebootStep === 2}
+                    className="h-16 bg-muted-bg border-2 border-border-themed hover:border-emerald-500/50 text-text-themed rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4 text-emerald-400" />
+                    Reboot Device
+                  </button>
+
+                  {/* Shutdown Button - Opens touchconfirm overlay */}
+                  <button
+                    onClick={() => setPowerActionConfirm('shutdown')}
+                    disabled={shutdownStep === 2}
+                    className="h-16 bg-muted-bg border-2 border-border-themed hover:border-red-500/50 text-text-themed rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <Power className="w-4 h-4 text-red-500" />
+                    Shut Down
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </div>
+
+        </div>
+      </div>
+
+      {/* Power Confirmation Dialog Overlay */}
+      <AnimatePresence>
+        {powerActionConfirm && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="max-w-md w-full bg-surface border border-border-themed rounded-3xl p-8 flex flex-col gap-6 shadow-2xl"
+            >
+              <div className="flex flex-col items-center text-center gap-4">
+                <div className={cn(
+                  "w-16 h-16 rounded-full flex items-center justify-center border-2",
+                  powerActionConfirm === 'reboot' ? "bg-emerald-950/40 border-emerald-500/50" : "bg-red-950/40 border-red-500/50"
+                )}>
+                  {powerActionConfirm === 'reboot' ? (
+                    <RefreshCw className="w-8 h-8 text-emerald-400" />
+                  ) : (
+                    <Power className="w-8 h-8 text-red-500" />
+                  )}
+                </div>
+                
+                <div>
+                  <h3 className="text-2xl font-black uppercase tracking-tight text-text-themed">
+                    {powerActionConfirm === 'reboot' ? 'Confirm System Reboot?' : 'Confirm System Shutdown?'}
+                  </h3>
+                  <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mt-2 leading-relaxed">
+                    {powerActionConfirm === 'reboot' 
+                      ? 'Are you sure you want to reboot the device? Verify medication counts are complete first.'
+                      : 'Are you sure you want to shut down the system? You will need to physically power cycle the Pi 5 to turn it back on.'
+                    }
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <button 
+                  onClick={() => setPowerActionConfirm(null)}
+                  className="h-16 bg-muted-bg hover:bg-zinc-800 text-text-themed border border-border-themed rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all hover:border-zinc-500 active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <X className="w-4 h-4 text-zinc-400" />
+                  Cancel
+                </button>
+                <button 
+                  onClick={async () => {
+                    const action = powerActionConfirm;
+                    setPowerActionConfirm(null);
+                    if (action === 'reboot') {
+                      setRebootStep(2);
+                      showToast('Reboot command initiated...', 'success');
+                      try {
+                        const res = await fetch('/api/power/reboot', { method: 'POST' });
+                        const data = await res.json();
+                        if (data.success) {
+                          showToast(data.message || 'System reboot is starting.', 'success');
+                        } else {
+                          showToast(data.message || 'Failed to reboot', 'error');
+                          setRebootStep(0);
+                        }
+                      } catch {
+                        showToast('Connection lost - system is likely rebooting', 'success');
+                      }
+                    } else if (action === 'shutdown') {
+                      setShutdownStep(2);
+                      showToast('Shutdown command initiated...', 'success');
+                      try {
+                        const res = await fetch('/api/power/shutdown', { method: 'POST' });
+                        const data = await res.json();
+                        if (data.success) {
+                          showToast(data.message || 'System shutdown is starting.', 'success');
+                        } else {
+                          showToast(data.message || 'Failed to shut down', 'error');
+                          setShutdownStep(0);
+                        }
+                      } catch {
+                        showToast('Connection lost - system is likely powering down', 'success');
+                      }
+                    }
+                  }}
+                  className={cn(
+                    "h-16 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all active:scale-95 flex items-center justify-center gap-2 border-2",
+                    powerActionConfirm === 'reboot' 
+                      ? "bg-emerald-900 border-emerald-500 hover:bg-emerald-800 text-emerald-100" 
+                      : "bg-red-900 border-red-500 hover:bg-red-800 text-red-100"
+                  )}
+                >
+                  <Check className="w-4 h-4" />
+                  {powerActionConfirm === 'reboot' ? 'Confirm Reboot' : 'Confirm Shutdown'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Firmware updates modals */}
+      <AnimatePresence>
+        {updateInfo && updateInfo.updateAvailable && !updating && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-45 flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="max-w-md w-full bg-zinc-950 border border-zinc-800 rounded-3xl p-8 flex flex-col gap-6 shadow-2xl"
+            >
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] bg-primary/20 text-primary px-2.5 py-1 rounded-md border border-primary/30 font-black uppercase tracking-widest">Update Available</span>
+                  <h3 className="text-2xl font-black text-white mt-2 uppercase tracking-tight">Version {updateInfo.latestVersion}</h3>
+                </div>
+                <button onClick={() => setUpdateInfo(null)} className="text-zinc-500 hover:text-white font-black text-xs uppercase tracking-widest">Dismiss</button>
+              </div>
+
+              <div className="space-y-3">
+                <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Changelog & Improvements:</span>
+                <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 max-h-40 overflow-y-auto space-y-2">
+                  {updateInfo.changelog?.map((item: string, idx: number) => (
+                    <div key={idx} className="flex gap-2 text-xs font-semibold text-zinc-300 leading-relaxed uppercase">
+                      <span className="text-primary">•</span>
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <button 
+                  onClick={() => setUpdateInfo(null)}
+                  className="h-14 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-2xl font-black uppercase tracking-widest text-[#10px] transition-all active:scale-95"
+                >
+                  Postpone
+                </button>
+                <button 
+                  onClick={applyUpdate}
+                  className="h-14 bg-primary text-bg hover:opacity-90 rounded-2xl font-black uppercase tracking-widest text-xs transition-all active:scale-95"
+                >
+                  Install Now
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {updating && (
                 <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-8">
                   <motion.div 
                     initial={{ scale: 0.95, opacity: 0 }}
@@ -1347,12 +1613,7 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
                   </motion.div>
                 </div>
               )}
-            </AnimatePresence>
-          </div>
-          
-          <div className="h-40" /> {/* Extra spacer for bottom scroll padding */}
-        </div>
-      </div>
+      </AnimatePresence>
     </motion.div>
   );
 }
