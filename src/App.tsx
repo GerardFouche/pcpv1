@@ -833,29 +833,35 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
       if (data.success) {
         setUpdateInfo(data);
         if (data.updateAvailable) {
-          showToast(`New firmware version available: ${data.latestVersion}`, 'success');
+          showToast(`New firmware ${data.latestVersion} found! Downloading & installing automatically...`, 'success');
+          // Add a brief delay so the user can read the toast before the overlay transitions
+          setTimeout(() => {
+            applyUpdateByData(data);
+          }, 1500);
         } else {
           showToast('System is currently up to date.', 'success');
+          setCheckingUpdate(false);
         }
       } else {
         showToast('Update server handshake failed', 'error');
+        setCheckingUpdate(false);
       }
     } catch {
       showToast('Offline or update server unreachable', 'error');
-    } finally {
       setCheckingUpdate(false);
     }
   };
 
-  const applyUpdate = async () => {
+  const applyUpdateByData = async (data: any) => {
+    setCheckingUpdate(false);
     setUpdating(true);
     setUpdateProgress(0);
     setUpdateStatus('Handshaking with repository runner...');
     try {
       const res = await fetch('/api/updates/apply', { method: 'POST' });
-      const data = await res.json();
+      const applyData = await res.json();
       
-      if (data.success) {
+      if (applyData.success) {
         // Run simulated countdown that mirrors backend's 5s reload timeout
         const duration = 5000;
         const stepTime = 100;
@@ -886,12 +892,18 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
           }
         }, stepTime);
       } else {
-        showToast(data.message || 'Update failed', 'error');
+        showToast(applyData.message || 'Update failed', 'error');
         setUpdating(false);
       }
     } catch {
       showToast('Connection timed out during download process', 'error');
       setUpdating(false);
+    }
+  };
+
+  const applyUpdate = async () => {
+    if (updateInfo) {
+      applyUpdateByData(updateInfo);
     }
   };
 
