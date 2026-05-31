@@ -378,7 +378,28 @@ async function startServer() {
           }
         }, 1500);
       } else {
-        res.status(400).json({ success: false, message: error.message });
+        const rawMsg = error.message || '';
+        let cleanMsg = rawMsg;
+        const lower = rawMsg.toLowerCase();
+        if (lower.includes('secrets were required') || lower.includes('bad secrets') || lower.includes('invalid secrets') || lower.includes('secret') || lower.includes('(7)')) {
+          cleanMsg = 'Incorrect WiFi password or authentication failed. Please enter the correct key.';
+        } else if (lower.includes('802-11-wireless-security.key-mgmt') || lower.includes('key-mgmt') || lower.includes('(10)')) {
+          cleanMsg = 'Security property missing. Ensure appropriate password/secrets are provided.';
+        } else if (lower.includes('association') || lower.includes('timeout') || lower.includes('timed out')) {
+          cleanMsg = 'Connection timed out. Check that the router is near and your password is correct.';
+        } else if (lower.includes('no device found') || lower.includes('device not found')) {
+          cleanMsg = 'No wireless interface hardware found.';
+        } else {
+          // Try to extract lines after "Error:"
+          const reasonMatch = rawMsg.match(/Error:\s*([\s\S]+)/i);
+          if (reasonMatch && reasonMatch[1]) {
+            cleanMsg = reasonMatch[1].split('\n')[0].trim();
+          }
+          if (cleanMsg.length > 100) {
+            cleanMsg = cleanMsg.substring(0, 100) + '...';
+          }
+        }
+        res.status(400).json({ success: false, message: cleanMsg });
       }
     }
   });

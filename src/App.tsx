@@ -23,6 +23,7 @@ import {
   Camera,
   Trash2,
   Eye,
+  EyeOff,
   Mail,
   Settings,
   Wifi,
@@ -56,9 +57,10 @@ const TOAST_DURATION = 2000;
 // Components
 const Toast: React.FC<{ message: string, type?: 'success' | 'error', onDismiss: () => void }> = ({ message, type = 'success', onDismiss }) => {
   useEffect(() => {
-    const timer = setTimeout(onDismiss, TOAST_DURATION);
+    const duration = type === 'error' ? 8000 : 3000;
+    const timer = setTimeout(onDismiss, duration);
     return () => clearTimeout(timer);
-  }, [message, onDismiss]);
+  }, [message, type, onDismiss]);
 
   return (
     <motion.div
@@ -67,17 +69,17 @@ const Toast: React.FC<{ message: string, type?: 'success' | 'error', onDismiss: 
       exit={{ opacity: 0, x: 50, scale: 0.9 }}
       onClick={onDismiss}
       className={cn(
-        "fixed top-8 right-8 z-[100] px-6 py-4 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.4)] font-black flex items-center gap-4 border-2 cursor-pointer active:scale-95 transition-all overflow-hidden",
-        type === 'error' ? "bg-red-950 border-red-500/50 text-red-500" : "bg-primary text-bg border-primary/20"
+        "fixed top-8 right-8 z-[100] max-w-[420px] px-6 py-4 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.4)] font-black flex items-center gap-4 border-2 cursor-pointer active:scale-95 transition-all overflow-hidden",
+        type === 'error' ? "bg-red-950 border-red-500/50 text-red-400" : "bg-primary text-bg border-primary/20"
       )}
     >
       <div className={cn(
         "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
         type === 'error' ? "bg-red-500/20" : "bg-bg/20"
       )}>
-        {type === 'error' ? <X className="w-5 h-5" /> : <Check className="w-5 h-5" />}
+        {type === 'error' ? <X className="w-5 h-5 text-red-400" /> : <Check className="w-5 h-5" />}
       </div>
-      <span className="uppercase tracking-widest text-sm whitespace-nowrap">{message}</span>
+      <span className="uppercase tracking-widest text-xs break-words">{message}</span>
     </motion.div>
   );
 };
@@ -806,6 +808,7 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
   const [scanning, setScanning] = useState(false);
   const [selectedNetwork, setSelectedNetwork] = useState<string | null>(null);
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [deviceName, setDeviceName] = useState('Loading...');
 
@@ -934,6 +937,7 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
         showToast(`Connected to ${selectedNetwork}`);
         setSelectedNetwork(null);
         setPassword('');
+        setShowPassword(false);
         onConnected();
       } else {
         showToast(data.message, 'error');
@@ -1034,7 +1038,7 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
                 {networks.map((n, i) => (
                   <button 
                     key={`${n.ssid}-${i}`} 
-                    onClick={() => setSelectedNetwork(n.ssid)}
+                    onClick={() => { setSelectedNetwork(n.ssid); setPassword(''); setShowPassword(false); }}
                     className={cn(
                       "w-full p-4 rounded-xl flex items-center justify-between border transition-all",
                       selectedNetwork === n.ssid ? "bg-primary/20 border-primary shadow-lg" : "bg-bg/40 border-border-themed hover:border-primary/50"
@@ -1059,15 +1063,24 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
                 <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="space-y-4 pt-4 border-t border-border-themed">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Connect to: {selectedNetwork}</span>
-                    <button onClick={() => setSelectedNetwork(null)} className="text-[10px] text-zinc-500 hover:text-primary uppercase font-black">Cancel</button>
+                    <button onClick={() => { setSelectedNetwork(null); setPassword(''); setShowPassword(false); }} className="text-[10px] text-zinc-500 hover:text-primary uppercase font-black">Cancel</button>
                   </div>
-                  <input 
-                    type="password" 
-                    placeholder="Network Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full h-14 bg-bg border border-border-themed rounded-xl px-4 text-sm font-bold focus:border-primary outline-none text-text-themed"
-                  />
+                  <div className="relative flex items-center">
+                    <input 
+                      type={showPassword ? "text" : "password"} 
+                      placeholder="Network Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full h-14 bg-bg border border-border-themed rounded-xl pl-4 pr-12 text-sm font-bold focus:border-primary outline-none text-text-themed"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 text-zinc-400 hover:text-primary transition-colors focus:outline-none"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                   <button 
                     onClick={connectWifi}
                     disabled={connecting}
