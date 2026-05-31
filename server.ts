@@ -157,6 +157,29 @@ async function startServer() {
         }
       }
 
+      // Fallback/Secondary Check: If it is a git repo, check if local HEAD is behind remote main
+      try {
+        const { exec } = await import('child_process');
+        const { promisify } = await import('util');
+        const execAsync = promisify(exec);
+
+        const { stdout: gitStatus } = await execAsync('git rev-parse --is-inside-work-tree').catch(() => ({ stdout: '' }));
+        if (gitStatus.trim() === 'true') {
+          // Fetch remote developments
+          await execAsync('git fetch --all').catch(() => {});
+          const { stdout: localHead } = await execAsync('git rev-parse HEAD').catch(() => ({ stdout: '' }));
+          const { stdout: remoteHead } = await execAsync('git rev-parse origin/main').catch(() => ({ stdout: '' }));
+          
+          if (localHead.trim() && remoteHead.trim() && localHead.trim() !== remoteHead.trim()) {
+            updateAvailable = true;
+            latestVersion = CURRENT_VERSION + ' (Git Update)';
+            changelog.push('New commits detected on GerardFouche/pcpv1 origin/main branch.');
+          }
+        }
+      } catch (gitErr) {
+        console.warn('[UPDATE CHECK] Git remote comparison warning:', gitErr);
+      }
+
       // Allow triggering forced mock update check with ?force=true for layout testing in AI Studio
       if (req.query.force === 'true') {
         latestVersion = 'PCPv1.2';
