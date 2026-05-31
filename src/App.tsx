@@ -475,7 +475,7 @@ function LoginScreen({ currentSsid, onLogin, onSettings, showToast }: { currentS
         onClick={onSettings}
         className="absolute bottom-6 left-6 w-14 h-14 bg-surface border border-border-themed rounded-xl flex items-center justify-center hover:opacity-80 transition-all shadow-lg group"
       >
-        <Settings className="w-6 h-6 text-zinc-400 group-hover:rotate-45 group-hover:text-primary duration-500" />
+        <Settings className="w-6 h-6 text-blue-500 group-hover:rotate-45 group-hover:text-blue-400 duration-500" />
         {!currentSsid && (
           <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-bg animate-pulse" />
         )}
