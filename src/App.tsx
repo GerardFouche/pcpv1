@@ -46,7 +46,8 @@ import {
   Info,
   ExternalLink,
   Calendar,
-  Globe
+  Globe,
+  Power
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { User, PillRecord, View, Role } from './types';
@@ -811,6 +812,8 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
   const [showPassword, setShowPassword] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [deviceName, setDeviceName] = useState('Loading...');
+  const [rebootStep, setRebootStep] = useState(0); // 0: idle, 1: confirming, 2: acting
+  const [shutdownStep, setShutdownStep] = useState(0); // 0: idle, 1: confirming, 2: acting
 
   // Core Self-Update Engine states
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -827,6 +830,52 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(data => setDeviceName(data.device_name || 'UNKNOWN'));
   }, []);
+
+  const handleReboot = async () => {
+    if (rebootStep === 0) {
+      setRebootStep(1);
+      setShutdownStep(0);
+      setTimeout(() => setRebootStep((prev) => (prev === 1 ? 0 : prev)), 4000);
+      return;
+    }
+    setRebootStep(2);
+    showToast('Reboot command sent...', 'success');
+    try {
+      const res = await fetch('/api/power/reboot', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message || 'System reboot is starting.', 'success');
+      } else {
+        showToast(data.message || 'Failed to reboot', 'error');
+        setRebootStep(0);
+      }
+    } catch {
+      showToast('Connection lost - system is likely rebooting', 'success');
+    }
+  };
+
+  const handleShutdown = async () => {
+    if (shutdownStep === 0) {
+      setShutdownStep(1);
+      setRebootStep(0);
+      setTimeout(() => setShutdownStep((prev) => (prev === 1 ? 0 : prev)), 4000);
+      return;
+    }
+    setShutdownStep(2);
+    showToast('Shutdown command sent...', 'success');
+    try {
+      const res = await fetch('/api/power/shutdown', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message || 'System shutdown is starting.', 'success');
+      } else {
+        showToast(data.message || 'Failed to shut down', 'error');
+        setShutdownStep(0);
+      }
+    } catch {
+      showToast('Connection lost - system is likely powering down', 'success');
+    }
+  };
 
   const checkForUpdates = async () => {
     setCheckingUpdate(true);
@@ -1160,6 +1209,54 @@ function SettingsScreen({ currentSsid, onConnected, theme, onThemeChange, onHard
                            Device name is write-protected. Modifications must be performed through the <span className="text-primary font-bold">Admin Panel</span>.
                         </p>
                      </div>
+                  </div>
+               </div>
+
+               {/* Power Controls */}
+               <div className="bg-surface rounded-3xl border border-border-themed p-8 flex flex-col gap-6 shadow-sm">
+                  <div className="flex items-center gap-3">
+                     <Power className="w-6 h-6 text-red-500/90" />
+                     <h3 className="text-xl font-black uppercase tracking-tight text-text-themed">Power Management</h3>
+                  </div>
+
+                  <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider leading-relaxed">
+                     Perform safe system restarts or shutdowns. Ensure medication count sessions are saved before executing.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-4">
+                     {/* Reboot button */}
+                     <button
+                        onClick={handleReboot}
+                        disabled={rebootStep === 2}
+                        className={cn(
+                           "h-16 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 border-2",
+                           rebootStep === 0 && "bg-muted-bg border-border-themed hover:border-emerald-500/50 text-text-themed",
+                           rebootStep === 1 && "bg-emerald-950 border-emerald-500/80 text-emerald-400 animate-pulse",
+                           rebootStep === 2 && "bg-bg border-emerald-500/20 text-zinc-500 cursor-not-allowed"
+                        )}
+                     >
+                        <RefreshCw className={cn("w-4 h-4 text-emerald-400", rebootStep === 1 && "animate-spin")} />
+                        {rebootStep === 0 && "Reboot Device"}
+                        {rebootStep === 1 && "Tap to Confirm"}
+                        {rebootStep === 2 && "Powering Cycle..."}
+                     </button>
+
+                     {/* Shutdown button */}
+                     <button
+                        onClick={handleShutdown}
+                        disabled={shutdownStep === 2}
+                        className={cn(
+                           "h-16 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 border-2",
+                           shutdownStep === 0 && "bg-muted-bg border-border-themed hover:border-red-500/50 text-text-themed",
+                           shutdownStep === 1 && "bg-red-950 border-red-500/80 text-red-400 animate-pulse",
+                           shutdownStep === 2 && "bg-bg border-red-500/20 text-zinc-500 cursor-not-allowed"
+                        )}
+                     >
+                        <Power className="w-4 h-4 text-red-500" />
+                        {shutdownStep === 0 && "Shut Down"}
+                        {shutdownStep === 1 && "Tap to Confirm"}
+                        {shutdownStep === 2 && "Halting OS..."}
+                     </button>
                   </div>
                </div>
 

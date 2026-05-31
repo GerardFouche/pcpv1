@@ -105,6 +105,38 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  app.post('/api/power/reboot', async (req, res) => {
+    try {
+      console.log('[POWER] Reboot requested');
+      if (process.env.NODE_ENV !== 'production') {
+        return res.json({ success: true, message: '[DEV MOCK] Reboot command triggered successfully.' });
+      }
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+      execAsync('sudo reboot').catch(err => console.error('[POWER] Reboot execution failed:', err));
+      res.json({ success: true, message: 'Rebooting device...' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Failed to trigger reboot' });
+    }
+  });
+
+  app.post('/api/power/shutdown', async (req, res) => {
+    try {
+      console.log('[POWER] Shutdown requested');
+      if (process.env.NODE_ENV !== 'production') {
+        return res.json({ success: true, message: '[DEV MOCK] Shutdown command triggered successfully.' });
+      }
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+      execAsync('sudo shutdown -h now').catch(err => console.error('[POWER] Shutdown execution failed:', err));
+      res.json({ success: true, message: 'Shutting down device...' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Failed to trigger shutdown' });
+    }
+  });
+
   const CURRENT_VERSION = 'PCPv1.1';
 
   function normalizeVersion(v: string) {
